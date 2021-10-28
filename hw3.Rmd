@@ -1,0 +1,385 @@
+---
+title: "HW3"
+author: "Vinayak Patel"
+date: "10/24/2021"
+output:
+  html_document:
+    code_folding: hide
+    highlight: tango
+    theme: united
+  word_document: default
+  pdf_document: default
+editor_options:
+  chunk_output_type: inline
+---
+
+
+
+# Objective
+
+In the project, I will explore the dataset for loan approval. I will create various models to predict the loan approvals. In the end, I will test the performance of each model based on the accuracy of the prediction
+
+
+# Data Exploration
+
+## Load the required libraries
+```{r libraries, include=FALSE, warning=FALSE, message=FALSE}
+#load library
+if (!require("knitr")) install.packages("knitr")
+if (!require("tidyverse")) install.packages("tidyverse")
+if (!require("kableExtra")) install.packages("kableExtra")
+if (!require("dplyr")) install.packages("dplyr")
+if (!require("DataExplorer")) install.packages("DataExplorer")
+if (!require("MASS")) install.packages("MASS")
+if (!require("caTools")) install.packages("caTools")
+if (!require("GGally")) install.packages("GGally")
+if (!require("caret")) install.packages("caret")
+if (!require("tree")) install.packages("tree")
+if (!require("rpart")) install.packages("rpart")
+if (!require("VIM")) install.packages("VIM")
+if (!require("pROC")) install.packages("pROC")
+if (!require("missForest")) install.packages("missForest")
+if (!require("healthcareai")) install.packages("healthcareai")
+#if (!require("fourfoldplot")) install.packages("fourfoldplot")
+if (!require("rpart")) install.packages("rpart")
+if (!require("rpart.plot")) install.packages("rpart.plot")
+if (!require("party")) install.packages("party")
+if (!require("partykit")) install.packages("partykit")
+```
+
+
+## Load Data
+
+```{r data, message=FALSE, warning=FALSE}
+# Load Data
+Loan_approval =  read.csv("C:/Users/patel/Downloads/Loan_approval.csv", header=T, na.strings=c("","NA"))
+```
+
+The loan approval status data dictionary is as below
+
+
+| VARIABLE          | DESCRIPTION                                   |
+|-------------------|-----------------------------------------------|
+| Loan_ID           | Unique Loan ID                                |
+| Gender            | Male/ Female                                  |
+| Married           | Applicant married (Y/N)                       |
+| Dependents        | Number of dependents                          |
+| Education         | Applicant Education (Graduate/ Undergraduate) |
+| Self_Employed     | Self employed (Y/N)                           |
+| ApplicantIncome   | Applicant income                              |
+| CoapplicantIncome | Coapplicant income                            |
+| LoanAmount        | Loan amount in thousands                      |
+| Loan_Amount_Term  | Term of loan in months                        |
+| Credit_History    | credit history meets guidelines               |
+| Property_Area     | Urban/ Semi Urban/ Rural                      |
+| Loan_Status       | Loan approved (Y/N)                           |
+
+## Data Summary
+
+```{r}
+#dim
+dim(Loan_approval)
+```
+
+There are 614 observations of 13 variables. 
+
+## Frequency Distributions
+
+This function lets us compare the distribution of a target variable vs another variable. The variables can be categorical or continuous.
+
+**For categorical features**
+
+```{r fig.height=7, fig.width=7, fig.align='center'}
+##To visualize distributions for all categorical features:
+par(mfrow=c(3,3))
+
+barplot(table(Loan_approval$Loan_Status, Loan_approval$Gender), main="Loan Status by Gender",
+        xlab="Gender", legend = TRUE)
+
+barplot(table(Loan_approval$Loan_Status, Loan_approval$Married), main="Loan Status by Married",
+        xlab="Married", legend = TRUE)
+
+barplot(table(Loan_approval$Loan_Status, Loan_approval$Dependents), main="Loan Status by Dependents",
+        xlab="Dependents", legend = TRUE)
+
+barplot(table(Loan_approval$Loan_Status, Loan_approval$Education), main="Loan Status by Education",
+        xlab="Education", legend = TRUE)
+
+barplot(table(Loan_approval$Loan_Status, Loan_approval$Credit_History), main="Loan Status by Credit_History",
+        xlab="Credit_History", legend = TRUE)
+
+barplot(table(Loan_approval$Loan_Status, Loan_approval$Self_Employed), main="Loan Status by Self Employed",	
+        xlab="Self_Employed", legend = TRUE)
+
+barplot(table(Loan_approval$Loan_Status, Loan_approval$Property_Area)
+, main="Loan Status by Property_Area",
+        xlab="Property_Area", legend = TRUE)
+
+```
+
+
+**continuous features**
+
+```{r fig.height=4, fig.width=10, fig.align='center'}
+#To visualize distributions for all continuous features:
+plot_histogram(Loan_approval)
+```
+
+## Data Cleaning
+
+```{r}
+#remove loan_id
+Loan_approval <- subset(Loan_approval, select = -Loan_ID )
+
+##mutate as factors for categorical data
+
+Loan_approval <- Loan_approval %>%
+           mutate(Gender = factor(Gender),
+                  Married = factor(Married),
+                  Dependents = factor(Dependents),
+                  Education = factor(Education),
+                  Self_Employed = factor(Self_Employed),
+                  Property_Area = factor(Property_Area),
+                  Loan_Status = factor(Loan_Status),
+                  Credit_History= factor(Credit_History))
+
+summary(Loan_approval)
+```
+
+I subset the load_id from the dataset and convert categorical data as factor. 
+
+
+### Missing values table
+
+```{r fig.height=4, fig.width=6, fig.align='center'}
+#Checking the Missing data proportion
+plot_missing(Loan_approval)
+```
+
+
+### Handling Missing Values
+
+From the missing value chart, I concluded that there isn’t any variance with missing values being more than 10 percent of the data. The dataset is almost complete just a few observations with missing values that can be omitted or impute. I will consider imputing the missing value with the missForest library.
+
+
+```{r}
+LA_df<- missForest(Loan_approval)
+Loan_approval_clean <- LA_df$ximp
+
+plot_missing(Loan_approval_clean)
+```
+
+
+###  Splitting the data 70-30
+```{r}
+set.seed(17)
+# splitting the data into 70-30
+
+df1_split=split_train_test(Loan_approval_clean,outcome=Loan_Status,0.7)
+
+#display train
+(head(df1_split$train,5))
+```
+
+
+
+# Linear Discriminant Analysis
+ 
+## Selection of the variable 
+
+I drop the categorical variables like Gender, Married, Dependents, Education, Self_Employed, Credit_History, Property_Area since Linear Discriminant Analysis (LDA) needs continuous variables to feed into the model.
+
+
+
+```{r}
+# remove categorical values
+La_categ<- subset(df1_split$train, select = -c(Gender,Married,Dependents,Education,Self_Employed,Credit_History,Property_Area ))
+```
+
+## linearly separable or nor?
+I will feature plot to see is there any linearly separable or nor?
+
+```{r fig.height=8, fig.width=8, fig.align='center'}
+
+library(AppliedPredictiveModeling)
+transparentTheme(trans = .4)
+
+featurePlot(x = La_categ[,1:4], 
+            y = La_categ$Loan_Status, 
+            plot = "ellipse",
+            ## Add a key at the top
+            auto.key = list(columns = 3))
+
+```
+
+The plot suggests that it is not linearly separable. The different colors of eclipses in the scatter plot represent the loan approval status. Overlapping of eclipse suggests that it is not linearly separable. So Linear Discriminant Analysis Model would not be ideal for this dataset. However, I can still create an LDA model to verify how it performs with other models.
+
+
+## Build LDA Model 
+
+```{r}
+lda_rt_s<-Sys.time()
+model_lda<- lda(Loan_Status ~. , data = La_categ)
+lda_rt_e<-Sys.time()
+lda_rt<- lda_rt_e-lda_rt_s
+
+model_lda
+
+```
+
+
+Prior probabilities of groups: the proportion of training observations in each group. 
+For example, there are 69% of the training observations is loan Approved 
+
+Group means: group center of gravity. Shows the mean of each variable in each group.
+
+Coefficients of linear discriminant: Shows the linear combination of predictor variables that are used to form the LDA decision rule
+
+
+
+```{r}
+La_categ_test<- subset(df1_split$test, select = -c(Gender,Married,Dependents,Education,Self_Employed,Credit_History,Property_Area ))
+
+
+predict_lda_test <- predict(model_lda, La_categ_test)
+
+cm_lda <- confusionMatrix( predict_lda_test$class, La_categ_test$Loan_Status)
+
+
+#confusionMatrix
+fourfoldplot(cm_lda$table, color = c("#CC6666", "#99CC99"),
+             conf.level = 0, margin = 1, main = "Confusion Matrix")
+
+```
+
+# K-nearest neighbor (KNN) algorithm
+
+## Preparation
+
+Preprocessing is all about correcting the problems in data before building a machine learning model using that data. Problems can be of many types like missing values, attributes with a different range, etc.
+
+```{r}
+prepro <- preProcess(x = df1_split$train, method = c("center", "scale"))
+prepro
+```
+TrainControl() method. It controls the computational nuances of the train() method.  I will use method `"repeatedcv"` for cross-validation 
+
+```{r}
+
+trControl <- trainControl(method="repeatedcv",number = 10, repeats = 5) 
+start_time<-Sys.time()
+model_knn <- train(Loan_Status ~ ., data = df1_split$train, 
+                method = "knn", 
+                trControl = trControl, 
+                preProcess = c("center","scale"), 
+                tuneLength = 20)
+model_knn 
+end_time<-Sys.time()
+knn_rt<- end_time-start_time
+```
+
+Accuracy was used to select the optimal model using the largest value.
+The final value used for the model was k = 5. 
+
+```{r}
+plot(model_knn)
+```
+
+## Predict from knn model
+
+```{r}
+predict_knn_test <- predict(model_knn,newdata = df1_split$test)
+mean(predict_knn_test == df1_split$test$Loan_Status) # accuracy
+cm_knn <- confusionMatrix(predict_knn_test, df1_split$test$Loan_Status)
+cm_knn
+
+fourfoldplot(cm_knn$table, color = c("#CC6666", "#99CC99"),
+             conf.level = 0, margin = 1, main = "knn Confusion Matrix")
+```
+
+
+# Decision Tree model
+
+```{r}
+
+
+start_time<-Sys.time()
+model_dt <- rpart(Loan_Status~ ., data=df1_split$train)
+
+end_time<-Sys.time()
+dt_rt<- end_time-start_time
+rpart.plot(model_dt, nn=TRUE)
+```
+
+
+```{r fig.height=5, fig.width=8}
+ctree_ <- ctree(Loan_Status~ ., data=df1_split$train)
+plot(ctree_)
+
+summary(model_dt)
+
+dtControl= rpart.control(minsplit = 20, xval = 81, cp=0.01)
+predict_dt_test <- predict(model_dt, df1_split$test, 
+                  type = "class",
+                  control=dtControl)
+
+cm_dt<- confusionMatrix(predict_dt_test, df1_split$test$Loan_Status)
+
+fourfoldplot(cm_dt$table, color = c("#CC6666", "#99CC99"),
+             conf.level = 0, margin = 1, main = "Decision Tree Confusion Matrix")
+plotcp(model_dt)
+
+```
+
+
+# Random Forest Model
+
+## Build Model
+```{r}
+Rfcontrol <- trainControl(method="repeatedcv", number=10, repeats=3, search="grid")
+start_time<-Sys.time()
+model_rf <- train(Loan_Status~., data = df1_split$train, method="rf")
+end_time<-Sys.time()
+
+rf_rt<- end_time-start_time
+
+print(model_rf)
+plot(model_rf)
+```
+
+## Importance variable
+```{r}
+rfImp <- varImp(model_rf, scale = FALSE)
+plot(rfImp)
+```
+Top 5 Importance variable are `Credit_History1`, `ApplicantIncome` `LoanAmount`,	`CoapplicantIncome`	and `Loan_Amount_Term`. 
+
+```{r}
+# prediction from random forest model
+predict_rf_test <- predict(model_rf, df1_split$test,type='raw')
+mean(predict_rf_test == df1_split$test$Loan_Status) # accuracy
+cm_rf <- confusionMatrix(predict_rf_test, df1_split$test$Loan_Status)
+cm_rf
+fourfoldplot(cm_rf$table, color = c("#CC6666", "#99CC99"),
+             conf.level = 0, margin = 1, main = "Decision Tree Confusion Matrix")
+```
+
+# Model Performance
+
+
+```{r}
+results<-as.data.frame(round(cm_lda$overall,4))
+names(results)[1] <-"lda"
+results$knn <- round(cm_knn$overall, 4)
+results$decisiontree <- round(cm_dt$overall, 4)
+results$randomforest <- round(cm_rf$overall, 4)
+
+
+runtime<-rbind(c(lda_rt, knn_rt, dt_rt, rf_rt))
+results<-data.frame(rbind(as.matrix(results), as.matrix(runtime)))
+row.names(results)[8] <- "Runtime"
+
+(results)
+
+```
+As `results` suggest that decision tree and random forest perform better than LDA and knn. both model Accuracy as `r results[1,3]` and `r results[1,4]` respectively The best performance or the model I pick is the decision tree algorithm because `Accuracy` of the model is better but also it is significantly faster than random forest algorithm. The runtime of a decision tree is `r results[8,3]` and on the other hand `r results[8,4]` 
